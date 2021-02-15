@@ -131,6 +131,7 @@ func newMessengerWithKey(shh types.Waku, privateKey *ecdsa.PrivateKey, logger *z
 		WithMultiAccounts(madb),
 		WithAccount(iai.ToMultiAccount()),
 		WithDatasync(),
+		WithToplevelDatabaseMigrations(),
 	}
 
 	options = append(options, extraOptions...)
