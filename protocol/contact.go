@@ -16,6 +16,11 @@ const (
 	contactRequestReceived = ":contact/request-received"
 )
 
+const (
+	largeImageType     = "large"
+	thumbnailImageType = "thumbnail"
+)
+
 // ContactDeviceInfo is a struct containing information about a particular device owned by a contact
 type ContactDeviceInfo struct {
 	// The installation id of the device
@@ -39,6 +44,20 @@ func (c *Contact) CanonicalName() string {
 }
 
 func (c *Contact) CanonicalImage() string {
+	if largeImage, ok := c.Images[largeImageType]; ok {
+		imageBase64, err := largeImage.GetDataURI()
+		if err == nil {
+			return imageBase64
+		}
+	}
+
+	if thumbImage, ok := c.Images[thumbnailImageType]; ok {
+		imageBase64, err := thumbImage.GetDataURI()
+		if err == nil {
+			return imageBase64
+		}
+	}
+
 	return c.Identicon
 }
 
