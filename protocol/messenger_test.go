@@ -2530,7 +2530,7 @@ func (s *MessengerSuite) TestEncryptDecryptIdentityImagesWithContactPubKeys() {
 		s.Require().NoError(err)
 		contactKeys[i] = contactKey
 
-		contact, err := buildContactFromPublicKey(&contactKey.PublicKey)
+		contact, err := BuildContactFromPublicKey(&contactKey.PublicKey)
 		s.Require().NoError(err)
 
 		contact.SystemTags = append(contact.SystemTags, contactAdded)
