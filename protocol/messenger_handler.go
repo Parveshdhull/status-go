@@ -106,6 +106,10 @@ func (m *Messenger) HandleMembershipUpdate(messageState *ReceivedMessageState, c
 		isActive := messageState.CurrentMessageState.Contact.IsAdded() || messageState.CurrentMessageState.Contact.ID == ourKey || waitingForApproval
 		newChat.Active = isActive
 		chat = &newChat
+
+		if isActive && messageState.CurrentMessageState.Contact.ID != ourKey {
+			messageState.Response.AddNotification(NewPrivateGroupInviteNotification(chat.ID, chat, messageState.CurrentMessageState.Contact))
+		}
 	} else {
 		existingGroup, err := newProtocolGroupFromChat(chat)
 		if err != nil {
@@ -1225,18 +1229,7 @@ func (m *Messenger) HandleGroupChatInvitation(state *ReceivedMessageState, pbGHI
 		return err
 	}
 
-	chat, ok := m.allChats.Load(groupChatInvitation.ChatId)
-	if !ok {
-		return errors.New("received group chat chatEntity for non-existing chat")
-	}
-
-	contact, ok := m.allContacts.Load(state.CurrentMessageState.Contact.ID)
-	if !ok {
-		return errors.New("received group chat chatEntity from non-existing contact")
-	}
-
 	state.GroupChatInvitations[groupChatInvitation.ID()] = groupChatInvitation
-	state.Response.AddNotification(NewPrivateGroupInviteNotification(groupChatInvitation.ID(), chat, contact))
 
 	return nil
 }
