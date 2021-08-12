@@ -1230,13 +1230,13 @@ func (m *Messenger) HandleGroupChatInvitation(state *ReceivedMessageState, pbGHI
 		return errors.New("received group chat chatEntity for non-existing chat")
 	}
 
-	contact, ok := m.allContacts.Load(groupChatInvitation.From)
+	contact, ok := m.allContacts.Load(state.CurrentMessageState.Contact.ID)
 	if !ok {
 		return errors.New("received group chat chatEntity from non-existing contact")
 	}
 
 	state.GroupChatInvitations[groupChatInvitation.ID()] = groupChatInvitation
-	state.Response.AddNotification(NewPrivateGroupInviteNotification(groupChatInvitation.ID(), chat, contact, m.allContacts))
+	state.Response.AddNotification(NewPrivateGroupInviteNotification(groupChatInvitation.ID(), chat, contact))
 
 	return nil
 }

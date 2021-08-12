@@ -74,7 +74,7 @@ func NewCommunityRequestToJoinNotification(id string, community *communities.Com
 	return body.toCommunityRequestToJoinNotification(id)
 }
 
-func NewPrivateGroupInviteNotification(id string, chat *Chat, contact *Contact, contacts *contactMap) *localnotifications.Notification {
+func NewPrivateGroupInviteNotification(id string, chat *Chat, contact *Contact) *localnotifications.Notification {
 	body := &NotificationBody{
 		Chat:    chat,
 		Contact: contact,
@@ -137,9 +137,9 @@ func (n NotificationBody) toPrivateGroupInviteNotification(id string) *localnoti
 		ID:       gethcommon.HexToHash(id),
 		Body:     n,
 		Title:    n.Contact.CanonicalName() + " invited you to " + n.Chat.Name,
-		Message:  n.Contact.CanonicalName() + " wants to join group " + n.Chat.Name,
+		Message:  n.Contact.CanonicalName() + " wants you to join group " + n.Chat.Name,
 		BodyType: localnotifications.TypeMessage,
-		Category: localnotifications.CategoryCommunityRequestToJoin,
+		Category: localnotifications.CategoryGroupInvite,
 		Deeplink: n.Chat.DeepLink(),
 		Author: localnotifications.NotificationAuthor{
 			Name: n.Contact.CanonicalName(),
