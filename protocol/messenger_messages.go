@@ -209,3 +209,113 @@ func (m *Messenger) applyDeleteMessage(messageDeletes []*DeleteMessage, message 
 
 	return m.persistence.HideMessage(message.ID)
 }
+
+func (m *Messenger) MessagesByChatID(request *requests.MessagesByChatID) ([]*common.Message, string, error) {
+
+	if err := request.Validate(); err != nil {
+		return nil, "", err
+	}
+
+	chatID := request.ChatID
+	cursor := request.Cursor
+	limit := request.Limit
+	direction := request.Direction
+
+	chat, err := m.persistence.Chat(chatID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if chat.Timeline() {
+		var chatIDs = []string{"@" + contactIDFromPublicKey(&m.identity.PublicKey)}
+		contacts, err := m.persistence.Contacts()
+		if err != nil {
+			return nil, "", err
+		}
+		for _, contact := range contacts {
+			if contact.IsAdded() {
+				chatIDs = append(chatIDs, "@"+contact.ID)
+			}
+		}
+		return m.persistence.MessageByChatIDs(chatIDs, cursor, limit, direction)
+	}
+	return m.persistence.MessageByChatID(chatID, cursor, limit, direction)
+}
+
+// DEPRECATED: use MessagesByChatID
+func (m *Messenger) MessageByChatID(chatID, cursor string, limit int) ([]*common.Message, string, error) {
+	chat, err := m.persistence.Chat(chatID)
+	if err != nil {
+		return nil, "", err
+	}
+
+	if chat.Timeline() {
+		var chatIDs = []string{"@" + contactIDFromPublicKey(&m.identity.PublicKey)}
+		contacts, err := m.persistence.Contacts()
+		if err != nil {
+			return nil, "", err
+		}
+		for _, contact := range contacts {
+			if contact.IsAdded() {
+				chatIDs = append(chatIDs, "@"+contact.ID)
+			}
+		}
+		return m.persistence.MessageByChatIDs(chatIDs, cursor, limit, requests.OrderingDirectionDesc)
+	}
+	return m.persistence.MessageByChatID(chatID, cursor, limit, requests.OrderingDirectionDesc)
+}
+
+func (m *Messenger) AllMessageByChatIDWhichMatchTerm(chatID string, searchTerm string, caseSensitive bool) ([]*common.Message, error) {
+	_, err := m.persistence.Chat(chatID)
+	if err != nil {
+		return nil, err
+	}
+
+	return m.persistence.AllMessageByChatIDWhichMatchTerm(chatID, searchTerm, caseSensitive)
+}
+
+func (m *Messenger) SaveMessages(messages []*common.Message) error {
+	return m.persistence.SaveMessages(messages)
+}
+
+func (m *Messenger) DeleteMessage(id string) error {
+	return m.persistence.DeleteMessage(id)
+}
+
+func (m *Messenger) DeleteMessagesByChatID(id string) error {
+	return m.persistence.DeleteMessagesByChatID(id)
+}
+
+// MarkMessagesSeen marks messages with `ids` as seen in the chat `chatID`.
+// It returns the number of affected messages or error. If there is an error,
+// the number of affected messages is always zero.
+func (m *Messenger) MarkMessagesSeen(chatID string, ids []string) (uint64, error) {
+	count, err := m.persistence.MarkMessagesSeen(chatID, ids)
+	if err != nil {
+		return 0, err
+	}
+	chat, err := m.persistence.Chat(chatID)
+	if err != nil {
+		return 0, err
+	}
+	m.allChats.Store(chatID, chat)
+	return count, nil
+}
+
+func (m *Messenger) MarkAllRead(chatID string) error {
+	chat, ok := m.allChats.Load(chatID)
+	if !ok {
+		return errors.New("chat not found")
+	}
+
+	err := m.persistence.MarkAllRead(chatID)
+	if err != nil {
+		return err
+	}
+
+	chat.UnviewedMessagesCount = 0
+	chat.UnviewedMentionsCount = 0
+	// TODO(samyoul) remove storing of an updated reference pointer?
+	m.allChats.Store(chat.ID, chat)
+	return nil
+}

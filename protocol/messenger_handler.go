@@ -16,6 +16,7 @@ import (
 	"github.com/status-im/status-go/protocol/communities"
 	"github.com/status-im/status-go/protocol/encryption/multidevice"
 	"github.com/status-im/status-go/protocol/protobuf"
+	"github.com/status-im/status-go/protocol/requests"
 	v1protocol "github.com/status-im/status-go/protocol/v1"
 )
 
@@ -600,7 +601,7 @@ func (m *Messenger) HandleDeleteMessage(response *MessengerResponse, deleteMessa
 
 	if chat.LastMessage != nil && chat.LastMessage.ID == originalMessage.ID {
 		// Get last message that is not hidden
-		messages, _, err := m.persistence.MessageByChatID(originalMessage.LocalChatID, "", 1)
+		messages, _, err := m.persistence.MessageByChatID(originalMessage.LocalChatID, "", 1, requests.OrderingDirectionDesc)
 		if err != nil {
 			return err
 		}
@@ -703,7 +704,7 @@ func (m *Messenger) HandleChatMessage(state *ReceivedMessageState) error {
 
 	if receivedMessage.Deleted && (chat.LastMessage == nil || chat.LastMessage.ID == receivedMessage.ID) {
 		// Get last message that is not hidden
-		messages, _, err := m.persistence.MessageByChatID(receivedMessage.LocalChatID, "", 1)
+		messages, _, err := m.persistence.MessageByChatID(receivedMessage.LocalChatID, "", 1, requests.OrderingDirectionDesc)
 		if err != nil {
 			return err
 		}
