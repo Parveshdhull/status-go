@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
+	"github.com/status-im/status-go/multiaccounts/accounts"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -1233,14 +1234,32 @@ func (m *Messenger) HandleGroupChatInvitation(state *ReceivedMessageState, pbGHI
 // HandleChatIdentity handles an incoming protobuf.ChatIdentity
 // extracts contact information stored in the protobuf and adds it to the user's contact for update.
 func (m *Messenger) HandleChatIdentity(state *ReceivedMessageState, ci protobuf.ChatIdentity) error {
-	logger := m.logger.With(zap.String("site", "HandleChatIdentity"))
-	allowed, err := m.isMessageAllowedFrom(state.CurrentMessageState.Contact.ID, nil)
+	s, err := m.settings.GetSettings()
 	if err != nil {
 		return err
 	}
 
-	if !allowed {
-		return ErrMessageNotAllowed
+	viewFromContacts := s.ProfilePicturesVisibility == accounts.ProfilePicturesVisibilityContactsOnly
+	viewFromNoOne := s.ProfilePicturesVisibility == accounts.ProfilePicturesVisibilityNone
+
+	// If we don't want to view profile images from anyone, don't process identity images.
+	// We don't want to store the profile images of other users, even if we don't display images.
+	if viewFromNoOne {
+		return nil
+	}
+
+	// If there are no images attached to a ChatIdentity, check if message is allowed
+	// Or if there are images and visibility is set to from contacts only, check if message is allowed
+	// otherwise process the images without checking if the message is allowed
+	if len(ci.Images) == 0 || (len(ci.Images) > 0 && (viewFromContacts)) {
+		allowed, err := m.isMessageAllowedFrom(state.CurrentMessageState.Contact.ID, nil)
+		if err != nil {
+			return err
+		}
+
+		if !allowed {
+			return ErrMessageNotAllowed
+		}
 	}
 	contact := state.CurrentMessageState.Contact
 
@@ -1256,7 +1275,6 @@ func (m *Messenger) HandleChatIdentity(state *ReceivedMessageState, ci protobuf.
 		}
 	}
 
-	logger.Info("Handling contact update")
 	newImages, err := m.persistence.SaveContactChatIdentity(contact.ID, &ci)
 	if err != nil {
 		return err
