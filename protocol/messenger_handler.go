@@ -1242,6 +1242,11 @@ func (m *Messenger) HandleChatIdentity(state *ReceivedMessageState, ci protobuf.
 	viewFromContacts := s.ProfilePicturesVisibility == accounts.ProfilePicturesVisibilityContactsOnly
 	viewFromNoOne := s.ProfilePicturesVisibility == accounts.ProfilePicturesVisibilityNone
 
+	m.logger.Debug("settings found",
+		zap.Bool("viewFromContacts", viewFromContacts),
+		zap.Bool("viewFromNoOne", viewFromNoOne),
+		)
+
 	// If we don't want to view profile images from anyone, don't process identity images.
 	// We don't want to store the profile images of other users, even if we don't display images.
 	if viewFromNoOne {
@@ -1252,11 +1257,13 @@ func (m *Messenger) HandleChatIdentity(state *ReceivedMessageState, ci protobuf.
 	// Or if there are images and visibility is set to from contacts only, check if message is allowed
 	// otherwise process the images without checking if the message is allowed
 	if len(ci.Images) == 0 || (len(ci.Images) > 0 && (viewFromContacts)) {
+		m.logger.Debug("checking if isMessageAllowedFrom")
 		allowed, err := m.isMessageAllowedFrom(state.CurrentMessageState.Contact.ID, nil)
 		if err != nil {
 			return err
 		}
 
+		m.logger.Debug("result", zap.Bool("isMessageAllowedFrom", allowed))
 		if !allowed {
 			return ErrMessageNotAllowed
 		}
@@ -1264,6 +1271,7 @@ func (m *Messenger) HandleChatIdentity(state *ReceivedMessageState, ci protobuf.
 	contact := state.CurrentMessageState.Contact
 
 	err = DecryptIdentityImagesWithIdentityPrivateKey(ci.Images, m.identity, state.CurrentMessageState.PublicKey)
+	m.logger.Debug("DecryptIdentityImagesWithIdentityPrivateKey", zap.Error(err))
 	if err != nil {
 		return err
 	}
@@ -1276,6 +1284,11 @@ func (m *Messenger) HandleChatIdentity(state *ReceivedMessageState, ci protobuf.
 	}
 
 	newImages, err := m.persistence.SaveContactChatIdentity(contact.ID, &ci)
+	m.logger.Debug("m.persistence.SaveContactChatIdentity",
+		zap.String("contact.ID", contact.ID),
+		zap.Any("ci", ci),
+		zap.Bool("newImages", newImages),
+		)
 	if err != nil {
 		return err
 	}

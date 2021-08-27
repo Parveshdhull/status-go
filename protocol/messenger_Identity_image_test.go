@@ -7,6 +7,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/cenkalti/backoff/v3"
 	"github.com/stretchr/testify/suite"
 	"go.uber.org/zap"
 
@@ -187,36 +188,52 @@ func (s *MessengerProfilePictureHandlerSuite) TestEncryptDecryptIdentityImagesWi
 	s.Require().True(ci.Images["large"].Encrypted)
 }
 
-func (s *MessengerProfilePictureHandlerSuite) TestSendingReceivingProfilePicture() {
-	profilePicShowSettings := []accounts.ProfilePicturesShowToType{
-		accounts.ProfilePicturesShowToContactsOnly,
-		accounts.ProfilePicturesShowToEveryone,
-		accounts.ProfilePicturesShowToNone,
+func (s *MessengerProfilePictureHandlerSuite) TestE2eSendingReceivingProfilePicture() {
+	profilePicShowSettings := map[string]accounts.ProfilePicturesShowToType{
+		"ShowToContactsOnly": accounts.ProfilePicturesShowToContactsOnly,
+		"ShowToEveryone":     accounts.ProfilePicturesShowToEveryone,
+		"ShowToNone":         accounts.ProfilePicturesShowToNone,
 	}
 
-	profilePicViewSettings := []accounts.ProfilePicturesVisibilityType{
-		accounts.ProfilePicturesVisibilityContactsOnly,
-		accounts.ProfilePicturesVisibilityEveryone,
-		accounts.ProfilePicturesVisibilityNone,
+	profilePicViewSettings := map[string]accounts.ProfilePicturesVisibilityType{
+		"ViewFromContactsOnly": accounts.ProfilePicturesVisibilityContactsOnly,
+		"ViewFromEveryone":     accounts.ProfilePicturesVisibilityEveryone,
+		"ViewFromNone":         accounts.ProfilePicturesVisibilityNone,
 	}
 
-	isContact := map[string][]bool{
+	isContactFor := map[string][]bool{
 		"alice": {true, false},
 		"bob":   {true, false},
 	}
 
-	for _, ss := range profilePicShowSettings {
-		for _, vs := range profilePicViewSettings {
-			for _, ac := range isContact["alice"] {
-				for _, bc := range isContact["bob"] {
+	// TODO Set option for testing between private and public chat types
+	//  private types need to send and received Contact Code message with attached chat identity
+	//  private types send large and thumbnail image payloads
+
+	// TODO see if possible to push each test scenario into a go routine
+
+	for sn, ss := range profilePicShowSettings {
+		for vn, vs := range profilePicViewSettings {
+			for _, ac := range isContactFor["alice"] {
+				for _, bc := range isContactFor["bob"] {
 					s.SetupTest()
+					s.logger.Info("testing with criteria:",
+						zap.String("profile picture Show Settings", sn),
+						zap.String("profile picture View Settings", vn),
+						zap.Bool("bob in Alice's Contacts", ac),
+						zap.Bool("alice in Bob's Contacts", bc),
+					)
+
+					expectPicture, err := resultExpected(ss, vs, ac, bc)
+					s.logger.Debug("expect to receive a profile pic?",
+						zap.Bool("result", expectPicture),
+						zap.Error(err))
 
 					// Store profile pictures
 					iis := s.generateAndStoreIdentityImages(s.alice)
 
-					err := s.alice.settings.SaveSetting("profile-pictures-show-to", ss)
+					err = s.alice.settings.SaveSetting("profile-pictures-show-to", ss)
 					s.NoError(err)
-
 					err = s.bob.settings.SaveSetting("profile-pictures-visibility", vs)
 					s.NoError(err)
 
@@ -224,19 +241,77 @@ func (s *MessengerProfilePictureHandlerSuite) TestSendingReceivingProfilePicture
 						_, err = s.alice.AddContact(context.Background(), s.generateKeyUID(&s.bob.identity.PublicKey))
 						s.NoError(err)
 					}
-
 					if bc {
 						_, err = s.bob.AddContact(context.Background(), s.generateKeyUID(&s.alice.identity.PublicKey))
 						s.NoError(err)
 					}
 
-					// TODO trigger sending chatIdentity via 1-1 chat
+					// Alice opens creates a public chat
+					aChat := CreatePublicChat("status", s.alice.transport)
+					err = s.alice.SaveChat(aChat)
+					s.Require().NoError(err)
 
-					// todo Poll bob to see if he got the chatIdentity
+					// Bob opens up the public chat and joins it
+					bChat := CreatePublicChat("status", s.alice.transport)
+					err = s.bob.SaveChat(bChat)
+					s.Require().NoError(err)
 
-					// todo Check if alice's profile picture is there
+					_, err = s.bob.Join(bChat)
+					s.Require().NoError(err)
 
-					// todo check if the result matches expectation
+					// Alice sends a message to the public chat
+					message := buildTestMessage(*aChat)
+					response, err := s.alice.SendChatMessage(context.Background(), message)
+					s.NoError(err)
+					s.NotNil(response)
+
+					// Poll bob to see if he got the chatIdentity
+					// Retrieve ChatIdentity
+					var contacts []*Contact
+
+					options := func(b *backoff.ExponentialBackOff) {
+						b.MaxElapsedTime = 2 * time.Second
+					}
+					err = tt.RetryWithBackOff(func() error {
+
+						response, err = s.bob.RetrieveAll()
+						if err != nil {
+							return err
+						}
+
+						contacts = response.Contacts
+
+						if len(contacts) > 0 && len(contacts[0].Images) > 0 {
+							s.logger.Debug("", zap.Any("contacts", contacts))
+							return nil
+						}
+
+						return errors.New("no new contacts with images received")
+					}, options)
+					if expectPicture {
+						s.NoError(err)
+						s.NotNil(contacts)
+					} else {
+						s.EqualError(err, "no new contacts with images received")
+						continue
+					}
+
+					// Check if alice's profile picture is there
+					var contact *Contact
+					for _, c := range contacts {
+						if c.ID == s.generateKeyUID(&s.alice.identity.PublicKey) {
+							contact = c
+						}
+					}
+					s.NotNil(contact)
+					s.Len(contact.Images, 1)
+
+					// Check if the result matches expectation
+					for _, ii := range iis {
+						if ii.Name == images.SmallDimName {
+							s.Equal(ii.Payload, contact.Images[images.SmallDimName].Payload)
+						}
+					}
 
 					s.TearDownTest()
 				}
@@ -244,6 +319,7 @@ func (s *MessengerProfilePictureHandlerSuite) TestSendingReceivingProfilePicture
 		}
 	}
 
+	s.SetupTest()
 }
 
 func resultExpected(ss accounts.ProfilePicturesShowToType, vs accounts.ProfilePicturesVisibilityType, ac, bc bool) (bool, error) {
@@ -252,7 +328,7 @@ func resultExpected(ss accounts.ProfilePicturesShowToType, vs accounts.ProfilePi
 		if ac {
 			return resultExpectedVS(vs, bc)
 		}
-		return true, nil
+		return false, nil
 	case accounts.ProfilePicturesShowToEveryone:
 		return resultExpectedVS(vs, bc)
 	case accounts.ProfilePicturesShowToNone:
@@ -265,7 +341,7 @@ func resultExpected(ss accounts.ProfilePicturesShowToType, vs accounts.ProfilePi
 func resultExpectedVS(vs accounts.ProfilePicturesVisibilityType, bc bool) (bool, error) {
 	switch vs {
 	case accounts.ProfilePicturesVisibilityContactsOnly:
-		return bc, nil
+		return true, nil
 	case accounts.ProfilePicturesVisibilityEveryone:
 		return true, nil
 	case accounts.ProfilePicturesVisibilityNone:
