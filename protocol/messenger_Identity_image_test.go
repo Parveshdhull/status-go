@@ -208,7 +208,7 @@ func (s *MessengerProfilePictureHandlerSuite) TestE2eSendingReceivingProfilePict
 
 	chatContexts := []chatContext{
 		publicChat,
-		//privateChat,
+		privateChat,
 	}
 
 	// TODO Set option for testing between private and public chat types
@@ -270,14 +270,14 @@ func (s *MessengerProfilePictureHandlerSuite) TestE2eSendingReceivingProfilePict
 							_, err = s.bob.Join(bChat)
 							s.NoError(err)
 						case privateChat:
-							aChat = CreateOneToOneChat(s.generateKeyUID(&s.aliceKey.PublicKey), &s.aliceKey.PublicKey, s.alice.transport)
+							aChat = CreateOneToOneChat(s.generateKeyUID(&s.bobKey.PublicKey), &s.bobKey.PublicKey, s.bob.transport)
 							err = s.alice.SaveChat(aChat)
 							s.NoError(err)
 
 							_, err = s.alice.Join(aChat)
 							s.NoError(err)
 
-							bChat := CreateOneToOneChat(s.generateKeyUID(&s.bobKey.PublicKey), &s.bobKey.PublicKey, s.bob.transport)
+							bChat := CreateOneToOneChat(s.generateKeyUID(&s.aliceKey.PublicKey), &s.aliceKey.PublicKey, s.alice.transport)
 							err = s.bob.SaveChat(bChat)
 							s.NoError(err)
 
