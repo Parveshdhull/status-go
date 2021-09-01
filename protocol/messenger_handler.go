@@ -5,7 +5,6 @@ import (
 	"crypto/ecdsa"
 	"encoding/hex"
 	"fmt"
-	"github.com/status-im/status-go/multiaccounts/accounts"
 
 	"github.com/pkg/errors"
 	"go.uber.org/zap"
@@ -13,6 +12,7 @@ import (
 	"github.com/status-im/status-go/eth-node/crypto"
 	"github.com/status-im/status-go/eth-node/types"
 	"github.com/status-im/status-go/images"
+	"github.com/status-im/status-go/multiaccounts/accounts"
 	"github.com/status-im/status-go/protocol/common"
 	"github.com/status-im/status-go/protocol/communities"
 	"github.com/status-im/status-go/protocol/encryption/multidevice"
@@ -1245,7 +1245,7 @@ func (m *Messenger) HandleChatIdentity(state *ReceivedMessageState, ci protobuf.
 	m.logger.Debug("settings found",
 		zap.Bool("viewFromContacts", viewFromContacts),
 		zap.Bool("viewFromNoOne", viewFromNoOne),
-		)
+	)
 
 	// If we don't want to view profile images from anyone, don't process identity images.
 	// We don't want to store the profile images of other users, even if we don't display images.
@@ -1288,7 +1288,7 @@ func (m *Messenger) HandleChatIdentity(state *ReceivedMessageState, ci protobuf.
 		zap.String("contact.ID", contact.ID),
 		zap.Any("ci", ci),
 		zap.Bool("newImages", newImages),
-		)
+	)
 	if err != nil {
 		return err
 	}

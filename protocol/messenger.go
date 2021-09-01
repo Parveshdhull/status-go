@@ -617,6 +617,8 @@ func (m *Messenger) publishContactCode() error {
 		return err
 	}
 
+	m.logger.Debug("attached chat identity", zap.Int("images len", len(contactCodeAdvertisement.ChatIdentity.Images)))
+
 	payload, err = proto.Marshal(contactCodeAdvertisement)
 	if err != nil {
 		return err
@@ -634,6 +636,7 @@ func (m *Messenger) publishContactCode() error {
 	if err != nil {
 		m.logger.Warn("failed to send a contact code", zap.Error(err))
 	}
+	m.logger.Debug("contact code sent")
 	return err
 }
 
