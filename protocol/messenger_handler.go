@@ -257,7 +257,7 @@ func (m *Messenger) handleCommandMessage(state *ReceivedMessageState, message *c
 	return nil
 }
 
-func (m *Messenger) HandleSyncInstallationContact(state *ReceivedMessageState, message protobuf.SyncInstallationContact) error {
+func (m *Messenger) HandleSyncInstallationContactV0(state *ReceivedMessageState, message protobuf.SyncInstallationContact) error {
 	chat, ok := state.AllChats.Load(state.CurrentMessageState.Contact.ID)
 	if !ok {
 		chat = OneToOneFromPublicKey(state.CurrentMessageState.PublicKey, state.Timesource)
@@ -291,6 +291,101 @@ func (m *Messenger) HandleSyncInstallationContact(state *ReceivedMessageState, m
 
 	// TODO(samyoul) remove storing of an updated reference pointer?
 	state.AllChats.Store(chat.ID, chat)
+
+	return nil
+}
+
+func (m *Messenger) HandleSyncInstallationContact(state *ReceivedMessageState, message protobuf.SyncInstallationContact) error {
+	removedOrBlcoked := message.Removed || message.Blocked
+	chat, ok := state.AllChats.Load(state.CurrentMessageState.Contact.ID)
+	if !ok && !removedOrBlcoked {
+		chat = OneToOneFromPublicKey(state.CurrentMessageState.PublicKey, state.Timesource)
+		// We don't want to show the chat to the user
+		chat.Active = false
+	}
+
+	contact, ok := state.AllContacts.Load(message.Id)
+	if !ok {
+		if message.Removed {
+			// Nothing to do in case if contact doesn't exist
+			return nil
+		}
+
+		var err error
+		contact, err = buildContactFromPkString(message.Id)
+		if err != nil {
+			return err
+		}
+	}
+
+	if contact.LastUpdated < message.Clock {
+		contact.IsSyncing = true
+		defer func() {
+			contact.IsSyncing = false
+		}()
+
+		if !contact.IsAdded() && !removedOrBlcoked {
+			contact.SystemTags = append(contact.SystemTags, contactAdded)
+		}
+		if contact.Name != message.EnsName {
+			contact.Name = message.EnsName
+			contact.ENSVerified = true
+			publicKey, err := contact.PublicKey()
+			if err != nil {
+				return nil
+			}
+
+			err = m.ENSVerified(common.PubkeyToHex(publicKey), message.EnsName)
+			if err != nil {
+				return nil
+			}
+		}
+		contact.LastUpdated = message.Clock
+		contact.LocalNickname = message.LocalNickname
+
+		if message.Blocked != contact.IsBlocked() {
+			if message.Blocked {
+				chats, err := m.BlockContact(contact)
+				if err != nil {
+					return err
+				}
+				state.Response.AddChats(chats)
+			} else {
+				contact.Unblock()
+			}
+		}
+
+		if message.Muted != chat.Muted {
+			if message.Muted {
+				err := m.MuteChat(chat.ID)
+				if err != nil {
+					return err
+				}
+			} else {
+				err := m.UnmuteChat(chat.ID)
+				if err != nil {
+					return err
+				}
+			}
+
+			state.Response.AddChat(chat)
+		}
+
+		if message.Removed {
+			err := m.removeContact(context.Background(), state.Response, contact.ID)
+			if err != nil {
+				return err
+			}
+		}
+
+		state.ModifiedContacts.Store(contact.ID, true)
+		state.AllContacts.Store(contact.ID, contact)
+	}
+
+	if !removedOrBlcoked {
+		// TODO(samyoul) remove storing of an updated reference pointer?
+		state.AllChats.Store(chat.ID, chat)
+	}
 
 	return nil
 }

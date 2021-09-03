@@ -18,6 +18,10 @@ message SyncInstallationContact {
   uint64 last_updated = 5;
   repeated string system_tags = 6;
   string local_nickname = 7;
+  uint64 version = 8;
+  bool blocked = 9;
+  bool muted = 10;
+  bool removed = 11;
 }
 
 message SyncInstallationAccount {

@@ -68,6 +68,7 @@ type Contact struct {
 	LocalNickname string              `json:"localNickname,omitempty"`
 
 	Images map[string]images.IdentityImage `json:"images"`
+	IsSyncing bool
 }
 
 func (c Contact) PublicKey() (*ecdsa.PublicKey, error) {
@@ -90,16 +91,29 @@ func (c Contact) IsBlocked() bool {
 	return existsInStringSlice(c.SystemTags, contactBlocked)
 }
 
-func (c *Contact) Remove() {
+func (c *Contact) removeTag(tagToRemove string) {
 	var newSystemTags []string
 	// Remove the newSystemTags system-tag, so that the contact is
 	// not considered "added" anymore
 	for _, tag := range newSystemTags {
-		if tag != contactAdded {
+		if tag != tagToRemove {
 			newSystemTags = append(newSystemTags, tag)
 		}
 	}
 	c.SystemTags = newSystemTags
+}
+
+func (c *Contact) Block() {
+	c.SystemTags = append(c.SystemTags, contactBlocked)
+}
+
+func (c *Contact) Unblock() {
+	c.removeTag(contactBlocked)
+	c.SystemTags = append(c.SystemTags, contactAdded)
+}
+
+func (c *Contact) Remove() {
+	c.removeTag(contactAdded)
 }
 
 // existsInStringSlice checks if a string is in a set.

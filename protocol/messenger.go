@@ -2194,7 +2194,7 @@ func (m *Messenger) SyncDevices(ctx context.Context, ensName, photoPath string) 
 	}
 
 	m.allContacts.Range(func(contactID string, contact *Contact) (shouldContinue bool) {
-		if contact.IsAdded() && contact.ID != myID {
+		if (contact.IsAdded() || contact.IsBlocked()) && contact.ID != myID {
 			if err = m.syncContact(ctx, contact); err != nil {
 				return false
 			}
@@ -2311,6 +2311,9 @@ func (m *Messenger) syncPublicChat(ctx context.Context, publicChat *Chat) error 
 // syncContact sync as contact with paired devices
 func (m *Messenger) syncContact(ctx context.Context, contact *Contact) error {
 	var err error
+	if contact.IsSyncing {
+		return nil
+	}
 	if !m.hasPairedDevices() {
 		return nil
 	}
@@ -2321,7 +2324,12 @@ func (m *Messenger) syncContact(ctx context.Context, contact *Contact) error {
 		Id:            contact.ID,
 		EnsName:       contact.Name,
 		LocalNickname: contact.LocalNickname,
+		Version:       1,
+		Blocked:       contact.IsBlocked(),
+		Muted:         chat.Muted,
+		Removed:       !contact.IsAdded(),
 	}
+
 	encodedMessage, err := proto.Marshal(syncMessage)
 	if err != nil {
 		return err
@@ -2707,8 +2715,12 @@ func (m *Messenger) handleRetrievedMessages(chatWithMessages map[transport.Filte
 						}
 
 						p := msg.ParsedMessage.Interface().(protobuf.SyncInstallationContact)
-						logger.Debug("Handling SyncInstallationContact", zap.Any("message", p))
-						err = m.HandleSyncInstallationContact(messageState, p)
+						logger.Info("Handling SyncInstallationContact", zap.Any("message", p))
+						if p.Version == 0 {
+							err = m.HandleSyncInstallationContactV0(messageState, p)
+						} else {
+							err = m.HandleSyncInstallationContact(messageState, p)
+						}
 						if err != nil {
 							logger.Warn("failed to handle SyncInstallationContact", zap.Error(err))
 							allMessagesProcessed = false
@@ -2821,7 +2833,12 @@ func (m *Messenger) handleRetrievedMessages(chatWithMessages map[transport.Filte
 						}
 
 					case protobuf.ContactUpdate:
-						logger.Debug("Handling ContactUpdate")
+						if !common.IsPubKeyEqual(messageState.CurrentMessageState.PublicKey, &m.identity.PublicKey) {
+							logger.Warn("coming from us, ignoring")
+							continue
+						}
+
+						logger.Info("Handling ContactUpdate")
 						contactUpdate := msg.ParsedMessage.Interface().(protobuf.ContactUpdate)
 						err = m.HandleContactUpdate(messageState, contactUpdate)
 						if err != nil {
@@ -3323,6 +3340,14 @@ func (m *Messenger) MuteChat(chatID string) error {
 		return err
 	}
 
+	contact, ok := m.allContacts.Load(chatID)
+	if ok {
+		err := m.syncContact(context.Background(), contact)
+		if err != nil {
+			return err
+		}
+	}
+
 	chat.Muted = true
 	// TODO(samyoul) remove storing of an updated reference pointer?
 	m.allChats.Store(chat.ID, chat)
@@ -3341,6 +3366,14 @@ func (m *Messenger) UnmuteChat(chatID string) error {
 	err := m.persistence.UnmuteChat(chatID)
 	if err != nil {
 		return err
+	}
+
+	contact, ok := m.allContacts.Load(chatID)
+	if ok {
+		err := m.syncContact(context.Background(), contact)
+		if err != nil {
+			return err
+		}
 	}
 
 	chat.Muted = false
