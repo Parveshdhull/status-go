@@ -264,12 +264,12 @@ func (api *PublicAPI) CreateProfileChat(parent context.Context, request *request
 	return api.service.messenger.CreateProfileChat(request)
 }
 
-func (api *PublicAPI) Chats(parent context.Context) []*protocol.Chat {
+func (api *PublicAPI) Chats(parent context.Context) []*protocol.ChatPreview {
 	return api.service.messenger.Chats()
 }
 
-func (api *PublicAPI) LatestActiveChats(parent context.Context) []*protocol.Chat {
-	return api.service.messenger.LatestActiveChats()
+func (api *PublicAPI) Chat(parent context.Context, chatID string) *protocol.Chat {
+	return api.service.messenger.Chat(chatID)
 }
 
 func (api *PublicAPI) ActiveChats(parent context.Context) []*protocol.Chat {
