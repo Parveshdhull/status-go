@@ -845,6 +845,34 @@ func (db sqlitePersistence) SaveWhenChatIdentityLastPublished(chatID string, has
 	return nil
 }
 
+func (db sqlitePersistence) ResetWhenChatIdentityLastPublished(chatID string) (err error) {
+	tx, err := db.db.BeginTx(context.Background(), &sql.TxOptions{})
+	if err != nil {
+		return err
+	}
+	defer func() {
+		if err == nil {
+			err = tx.Commit()
+			return
+		}
+		// don't shadow original error
+		_ = tx.Rollback()
+	}()
+
+	stmt, err := tx.Prepare("INSERT INTO chat_identity_last_published (chat_id, clock_value, hash) VALUES (?, ?, ?)")
+	if err != nil {
+		return err
+	}
+	defer stmt.Close()
+
+	_, err = stmt.Exec(chatID, 0, []byte("."))
+	if err != nil {
+		return err
+	}
+
+	return nil
+}
+
 func (db sqlitePersistence) InsertStatusUpdate(userStatus UserStatus) error {
 	_, err := db.db.Exec(`INSERT INTO status_updates(
 		public_key,

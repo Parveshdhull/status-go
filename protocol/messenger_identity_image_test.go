@@ -40,15 +40,18 @@ type MessengerProfilePictureHandlerSuite struct {
 	logger *zap.Logger
 }
 
-func (s *MessengerProfilePictureHandlerSuite) SetupTest() {
-	var err error
-
+func (s *MessengerProfilePictureHandlerSuite) SetupSuite() {
 	s.logger = tt.MustCreateTestLogger()
+}
+
+func (s *MessengerProfilePictureHandlerSuite) setup() {
+	var err error
 
 	// Setup Waku things
 	config := waku.DefaultConfig
 	config.MinimumAcceptedPoW = 0
-	shh := waku.New(&config, s.logger)
+	wakuLogger := s.logger.Named("Waku")
+	shh := waku.New(&config, wakuLogger)
 	s.shh = gethbridge.NewGethWakuWrapper(shh)
 	s.Require().NoError(shh.Start())
 
@@ -59,28 +62,55 @@ func (s *MessengerProfilePictureHandlerSuite) SetupTest() {
 	s.Require().NoError(err)
 
 	// Generate Alice Messenger
-	s.alice, err = newMessengerWithKey(s.shh, s.aliceKey, s.logger, []Option{})
+	aliceLogger := s.logger.Named("Alice messenger")
+	s.alice, err = newMessengerWithKey(s.shh, s.aliceKey, aliceLogger, []Option{})
 	s.Require().NoError(err)
-	_, err = s.alice.Start()
-	s.Require().NoError(err)
+	s.logger.Debug("alice messenger created")
 
 	// Generate Bob Messenger
-	s.bob, err = newMessengerWithKey(s.shh, s.bobKey, s.logger, []Option{})
+	bobLogger := s.logger.Named("Bob messenger")
+	s.bob, err = newMessengerWithKey(s.shh, s.bobKey, bobLogger, []Option{})
 	s.Require().NoError(err)
-	_, err = s.bob.Start()
-	s.Require().NoError(err)
+	s.logger.Debug("bob messenger created")
 
 	// Setup MultiAccount for Alice Messenger
+	s.logger.Debug("alice setupMultiAccount before")
 	s.setupMultiAccount(s.alice)
+	s.logger.Debug("alice setupMultiAccount after")
 }
 
-func (s *MessengerProfilePictureHandlerSuite) TearDownTest() {
+func (s *MessengerProfilePictureHandlerSuite) setupTest() {
+	s.logger.Debug("setupTest fired")
+	s.setup()
+	s.logger.Debug("setupTest completed")
+}
+
+func (s *MessengerProfilePictureHandlerSuite) SetupTest() {
+	s.logger.Debug("SetupTest fired")
+	s.setup()
+	s.logger.Debug("SetupTest completed")
+}
+
+func (s *MessengerProfilePictureHandlerSuite) tearDown() {
 	// Shutdown messengers
 	s.NoError(s.alice.Shutdown())
 	s.alice = nil
 	s.NoError(s.bob.Shutdown())
 	s.bob = nil
 	_ = s.logger.Sync()
+	//time.Sleep(2 * time.Second)
+}
+
+func (s *MessengerProfilePictureHandlerSuite) tearDownTest() {
+	s.logger.Debug("tearDownTest fired")
+	s.tearDown()
+	s.logger.Debug("tearDownTest completed")
+}
+
+func (s *MessengerProfilePictureHandlerSuite) TearDownTest() {
+	s.logger.Debug("TearDownTest fired")
+	s.tearDown()
+	s.logger.Debug("TearDownTest completed")
 }
 
 func (s *MessengerProfilePictureHandlerSuite) generateKeyUID(publicKey *ecdsa.PublicKey) string {
@@ -207,7 +237,7 @@ func (s *MessengerProfilePictureHandlerSuite) TestE2eSendingReceivingProfilePict
 	}
 
 	chatContexts := []chatContext{
-		publicChat,
+		//publicChat,
 		privateChat,
 	}
 
@@ -222,7 +252,8 @@ func (s *MessengerProfilePictureHandlerSuite) TestE2eSendingReceivingProfilePict
 			for vn, vs := range profilePicViewSettings {
 				for _, ac := range isContactFor["alice"] {
 					for _, bc := range isContactFor["bob"] {
-						s.SetupTest()
+						s.logger.Debug("top of the loop")
+						s.setupTest()
 						s.logger.Info("testing with criteria:",
 							zap.String("chat context type", string(cc)),
 							zap.String("profile picture Show Settings", sn),
@@ -237,69 +268,106 @@ func (s *MessengerProfilePictureHandlerSuite) TestE2eSendingReceivingProfilePict
 							zap.Error(err))
 
 						// Store profile pictures
+						s.logger.Debug("generateAndStoreIdentityImages before")
 						iis := s.generateAndStoreIdentityImages(s.alice)
+						s.logger.Debug("generateAndStoreIdentityImages after")
 
+						s.logger.Debug("Save alice profile-pictures-show-to setting before")
 						err = s.alice.settings.SaveSetting("profile-pictures-show-to", ss)
-						s.NoError(err)
+						s.Require().NoError(err)
+						s.logger.Debug("Save alice profile-pictures-show-to setting after")
+
+						s.logger.Debug("Save bob profile-pictures-visibility setting before")
 						err = s.bob.settings.SaveSetting("profile-pictures-visibility", vs)
-						s.NoError(err)
+						s.Require().NoError(err)
+						s.logger.Debug("Save bob profile-pictures-visibility setting after")
 
+						s.logger.Debug("alice add contact before")
 						if ac {
+							s.logger.Debug("alice has contact to add")
 							_, err = s.alice.AddContact(context.Background(), s.generateKeyUID(&s.bob.identity.PublicKey))
-							s.NoError(err)
+							s.Require().NoError(err)
+							s.logger.Debug("alice add contact after")
 						}
-						if bc {
-							_, err = s.bob.AddContact(context.Background(), s.generateKeyUID(&s.alice.identity.PublicKey))
-							s.NoError(err)
-						}
+						s.logger.Debug("alice add contact after after")
 
+						s.logger.Debug("bob add contact before")
+						if bc {
+							s.logger.Debug("bob has contact to add")
+							_, err = s.bob.AddContact(context.Background(), s.generateKeyUID(&s.alice.identity.PublicKey))
+							s.Require().NoError(err)
+							s.logger.Debug("bob add contact after")
+						}
+						s.logger.Debug("bob add contact after after")
+
+						s.logger.Debug("Before making chat for bob and alice")
 						// Create chats
 						var aChat *Chat
 						switch cc {
 						case publicChat:
+							s.logger.Debug("making publicChats for bob and alice")
+
 							// Alice opens creates a public chat
 							aChat = CreatePublicChat("status", s.alice.transport)
 							err = s.alice.SaveChat(aChat)
-							s.NoError(err)
+							s.Require().NoError(err)
 
 							// Bob opens up the public chat and joins it
 							bChat := CreatePublicChat("status", s.alice.transport)
 							err = s.bob.SaveChat(bChat)
-							s.NoError(err)
+							s.Require().NoError(err)
 
 							_, err = s.bob.Join(bChat)
-							s.NoError(err)
+							s.Require().NoError(err)
 						case privateChat:
+							s.logger.Debug("making privateChats for alice and bob")
+
+							s.logger.Debug("Alice making one to one chat with bob")
 							aChat = CreateOneToOneChat(s.generateKeyUID(&s.bobKey.PublicKey), &s.bobKey.PublicKey, s.bob.transport)
+							s.logger.Debug("Alice saving one to one chat with bob")
 							err = s.alice.SaveChat(aChat)
-							s.NoError(err)
+							s.Require().NoError(err)
+							s.logger.Debug("Alice saved one to one chat with bob")
 
+							s.logger.Debug("Alice joining one to one chat with bob")
 							_, err = s.alice.Join(aChat)
-							s.NoError(err)
+							s.Require().NoError(err)
+							s.logger.Debug("Alice joined one to one chat with bob")
 
+							s.logger.Debug("Bob making one to one chat with alice")
 							bChat := CreateOneToOneChat(s.generateKeyUID(&s.aliceKey.PublicKey), &s.aliceKey.PublicKey, s.alice.transport)
+							s.logger.Debug("Bob saving one to one chat with alice")
 							err = s.bob.SaveChat(bChat)
-							s.NoError(err)
+							s.Require().NoError(err)
+							s.logger.Debug("Bob saved one to one chat with alice")
 
+							s.logger.Debug("Bob joining one to one chat with alice")
 							_, err = s.bob.Join(bChat)
-							s.NoError(err)
+							s.Require().NoError(err)
+							s.logger.Debug("Bob joined one to one chat with alice")
 
+							s.logger.Debug("alice before manually triggering publishContactCode")
 							err = s.alice.publishContactCode()
-							s.NoError(err)
+							s.logger.Debug("alice after manually triggering publishContactCode",
+								zap.Error(err))
+							s.Require().NoError(err)
 						default:
 							s.Failf("unexpected chat context type", "%s", string(cc))
 						}
 
+						s.logger.Debug("Build and send a chat from alice")
+
 						// Alice sends a message to the public chat
 						message := buildTestMessage(*aChat)
 						response, err := s.alice.SendChatMessage(context.Background(), message)
-						s.NoError(err)
-						s.NotNil(response)
+						s.Require().NoError(err)
+						s.Require().NotNil(response)
 
 						// Poll bob to see if he got the chatIdentity
 						// Retrieve ChatIdentity
 						var contacts []*Contact
 
+						s.logger.Debug("Checking Bob to see if he got the chatIdentity")
 						options := func(b *backoff.ExponentialBackOff) {
 							b.MaxElapsedTime = 2 * time.Second
 						}
@@ -311,6 +379,7 @@ func (s *MessengerProfilePictureHandlerSuite) TestE2eSendingReceivingProfilePict
 							}
 
 							contacts = response.Contacts
+							s.logger.Debug("RetryWithBackOff contact data", zap.Any("contacts", contacts))
 
 							if len(contacts) > 0 && len(contacts[0].Images) > 0 {
 								s.logger.Debug("", zap.Any("contacts", contacts))
@@ -319,13 +388,30 @@ func (s *MessengerProfilePictureHandlerSuite) TestE2eSendingReceivingProfilePict
 
 							return errors.New("no new contacts with images received")
 						}, options)
+
+						s.logger.Debug("Finished RetryWithBackOff got Bob",
+							zap.Any("contacts", contacts),
+							zap.Error(err))
+
 						if expectPicture {
-							s.NoError(err)
-							s.NotNil(contacts)
+							s.logger.Debug("expecting a contact with images")
+							s.Require().NoError(err)
+							s.Require().NotNil(contacts)
 						} else {
-							s.EqualError(err, "no new contacts with images received")
+							s.logger.Debug("expecting no contacts with images")
+							s.Require().EqualError(err, "no new contacts with images received")
+							s.logger.Info("Completed testing with criteria:",
+								zap.String("chat context type", string(cc)),
+								zap.String("profile picture Show Settings", sn),
+								zap.String("profile picture View Settings", vn),
+								zap.Bool("bob in Alice's Contacts", ac),
+								zap.Bool("alice in Bob's Contacts", bc),
+							)
+							s.tearDownTest()
 							continue
 						}
+
+						s.logger.Debug("checking alice's contact")
 
 						// Check if alice's contact data with profile picture is there
 						var contact *Contact
@@ -334,29 +420,40 @@ func (s *MessengerProfilePictureHandlerSuite) TestE2eSendingReceivingProfilePict
 								contact = c
 							}
 						}
-						s.NotNil(contact)
+						s.Require().NotNil(contact)
+
+						s.logger.Debug("checked alice's contact info all good")
 
 						// Check Alice's profile picture(s)
 						switch cc {
 						case publicChat:
-							s.Len(contact.Images, 1)
+							s.Require().Len(contact.Images, 1)
 
 							// Check if the result matches expectation
 							for _, ii := range iis {
 								if ii.Name == images.SmallDimName {
-									s.Equal(ii.Payload, contact.Images[images.SmallDimName].Payload)
+									s.Require().Equal(ii.Payload, contact.Images[images.SmallDimName].Payload)
 								}
 							}
+						case privateChat:
+							s.logger.Info("private chat chat images", zap.Any("iis", iis))
 						}
 
-						s.TearDownTest()
+						s.logger.Info("Completed testing with criteria:",
+							zap.String("chat context type", string(cc)),
+							zap.String("profile picture Show Settings", sn),
+							zap.String("profile picture View Settings", vn),
+							zap.Bool("bob in Alice's Contacts", ac),
+							zap.Bool("alice in Bob's Contacts", bc),
+						)
+						s.tearDownTest()
 					}
 				}
 			}
 		}
 	}
 
-	s.SetupTest()
+	s.setupTest()
 }
 
 func resultExpected(ss accounts.ProfilePicturesShowToType, vs accounts.ProfilePicturesVisibilityType, ac, bc bool) (bool, error) {

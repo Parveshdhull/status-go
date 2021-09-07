@@ -609,15 +609,23 @@ func (m *Messenger) publishContactCode() error {
 		m.logger.Error("could not build contact code advertisement", zap.Error(err))
 	}
 
+	m.logger.Debug("initing cca if not set")
 	if contactCodeAdvertisement == nil {
+		m.logger.Debug("cca was not set, setting to empty default")
 		contactCodeAdvertisement = &protobuf.ContactCodeAdvertisement{}
 	}
+
+	m.logger.Debug("before attachChatIdentity")
 	err = m.attachChatIdentity(contactCodeAdvertisement)
 	if err != nil {
 		return err
 	}
 
-	m.logger.Debug("attached chat identity", zap.Int("images len", len(contactCodeAdvertisement.ChatIdentity.Images)))
+	if contactCodeAdvertisement.ChatIdentity != nil {
+		m.logger.Debug("attached chat identity", zap.Int("images len", len(contactCodeAdvertisement.ChatIdentity.Images)))
+	} else {
+		m.logger.Debug("no attached chat identity")
+	}
 
 	payload, err = proto.Marshal(contactCodeAdvertisement)
 	if err != nil {
@@ -644,19 +652,25 @@ func (m *Messenger) publishContactCode() error {
 // if the `shouldPublish` conditions are met
 func (m *Messenger) attachChatIdentity(cca *protobuf.ContactCodeAdvertisement) error {
 	contactCodeTopic := transport.ContactCodeTopic(&m.identity.PublicKey)
+
+	m.logger.Debug("before shouldPublishChatIdentity")
 	shouldPublish, err := m.shouldPublishChatIdentity(contactCodeTopic)
 	if err != nil {
 		return err
 	}
+	m.logger.Debug("after shouldPublishChatIdentity",
+		zap.Bool("shouldPublish", shouldPublish))
 
 	if !shouldPublish {
 		return nil
 	}
 
+	m.logger.Debug("before createChatIdentity")
 	cca.ChatIdentity, err = m.createChatIdentity(privateChat)
 	if err != nil {
 		return err
 	}
+	m.logger.Debug("after createChatIdentity")
 
 	img, err := m.multiAccounts.GetIdentityImage(m.account.KeyUID, userimage.SmallDimName)
 	if err != nil {
@@ -741,7 +755,7 @@ func (m *Messenger) shouldPublishChatIdentity(chatID string) (bool, error) {
 		return false, nil
 	}
 
-	lp, hash, err := m.persistence.GetWhenChatIdentityLastPublished(chatID)
+	_, hash, err := m.persistence.GetWhenChatIdentityLastPublished(chatID)
 	if err != nil {
 		return false, err
 	}
@@ -750,7 +764,8 @@ func (m *Messenger) shouldPublishChatIdentity(chatID string) (bool, error) {
 		return true, nil
 	}
 
-	return lp == 0 || time.Now().Unix()-lp > 24*60*60, nil
+	return true, nil
+	//return lp == 0 || time.Now().Unix()-lp > 24*60*60, nil
 }
 
 // createChatIdentity creates a context based protobuf.ChatIdentity.
