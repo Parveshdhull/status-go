@@ -2194,7 +2194,7 @@ func (m *Messenger) SyncDevices(ctx context.Context, ensName, photoPath string) 
 	}
 
 	m.allContacts.Range(func(contactID string, contact *Contact) (shouldContinue bool) {
-		if (contact.IsAdded() || contact.IsBlocked()) && contact.ID != myID {
+		if contact.ID != myID {
 			if err = m.syncContact(ctx, contact); err != nil {
 				return false
 			}
@@ -2325,9 +2325,10 @@ func (m *Messenger) syncContact(ctx context.Context, contact *Contact) error {
 		EnsName:       contact.Name,
 		LocalNickname: contact.LocalNickname,
 		Version:       1,
+		Added:         contact.IsAdded(),
 		Blocked:       contact.IsBlocked(),
 		Muted:         chat.Muted,
-		Removed:       !contact.IsAdded(),
+		Removed:       contact.Removed,
 	}
 
 	encodedMessage, err := proto.Marshal(syncMessage)

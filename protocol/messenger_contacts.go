@@ -324,7 +324,7 @@ func (m *Messenger) shouldSyncContact(contact *Contact) bool {
 	}
 
 	return  contact.LocalNickname != previousContact.LocalNickname ||
-		m.isNewContact(contact) ||
+		contact.IsAdded() != previousContact.IsAdded() ||
 		previousContact.IsBlocked() != contact.IsBlocked()
 }
 

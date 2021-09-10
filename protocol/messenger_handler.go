@@ -298,7 +298,9 @@ func (m *Messenger) HandleSyncInstallationContactV0(state *ReceivedMessageState,
 func (m *Messenger) HandleSyncInstallationContact(state *ReceivedMessageState, message protobuf.SyncInstallationContact) error {
 	removedOrBlcoked := message.Removed || message.Blocked
 	chat, ok := state.AllChats.Load(state.CurrentMessageState.Contact.ID)
-	if !ok && !removedOrBlcoked {
+	newChat := false
+	if !ok && message.Added && !removedOrBlcoked {
+		newChat = true
 		chat = OneToOneFromPublicKey(state.CurrentMessageState.PublicKey, state.Timesource)
 		// We don't want to show the chat to the user
 		chat.Active = false
@@ -324,12 +326,11 @@ func (m *Messenger) HandleSyncInstallationContact(state *ReceivedMessageState, m
 			contact.IsSyncing = false
 		}()
 
-		if !contact.IsAdded() && !removedOrBlcoked {
+		if message.Added {
 			contact.SystemTags = append(contact.SystemTags, contactAdded)
 		}
 		if contact.Name != message.EnsName {
 			contact.Name = message.EnsName
-			contact.ENSVerified = true
 			publicKey, err := contact.PublicKey()
 			if err != nil {
 				return nil
@@ -337,8 +338,9 @@ func (m *Messenger) HandleSyncInstallationContact(state *ReceivedMessageState, m
 
 			err = m.ENSVerified(common.PubkeyToHex(publicKey), message.EnsName)
 			if err != nil {
-				return nil
+				contact.ENSVerified = false
 			}
+			contact.ENSVerified = true
 		}
 		contact.LastUpdated = message.Clock
 		contact.LocalNickname = message.LocalNickname
@@ -355,7 +357,7 @@ func (m *Messenger) HandleSyncInstallationContact(state *ReceivedMessageState, m
 			}
 		}
 
-		if message.Muted != chat.Muted {
+		if !newChat && message.Muted != chat.Muted {
 			if message.Muted {
 				err := m.MuteChat(chat.ID)
 				if err != nil {
@@ -382,7 +384,7 @@ func (m *Messenger) HandleSyncInstallationContact(state *ReceivedMessageState, m
 		state.AllContacts.Store(contact.ID, contact)
 	}
 
-	if !removedOrBlcoked {
+	if !removedOrBlcoked && !newChat {
 		// TODO(samyoul) remove storing of an updated reference pointer?
 		state.AllChats.Store(chat.ID, chat)
 	}

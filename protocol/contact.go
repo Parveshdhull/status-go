@@ -67,8 +67,9 @@ type Contact struct {
 	DeviceInfo    []ContactDeviceInfo `json:"deviceInfo"`
 	LocalNickname string              `json:"localNickname,omitempty"`
 
-	Images map[string]images.IdentityImage `json:"images"`
+	Images    map[string]images.IdentityImage `json:"images"`
 	IsSyncing bool
+	Removed   bool
 }
 
 func (c Contact) PublicKey() (*ecdsa.PublicKey, error) {
@@ -114,6 +115,7 @@ func (c *Contact) Unblock() {
 
 func (c *Contact) Remove() {
 	c.removeTag(contactAdded)
+	c.Removed = true
 }
 
 // existsInStringSlice checks if a string is in a set.
