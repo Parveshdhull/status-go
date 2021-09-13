@@ -257,45 +257,7 @@ func (m *Messenger) handleCommandMessage(state *ReceivedMessageState, message *c
 	return nil
 }
 
-func (m *Messenger) HandleSyncInstallationContactV0(state *ReceivedMessageState, message protobuf.SyncInstallationContact) error {
-	chat, ok := state.AllChats.Load(state.CurrentMessageState.Contact.ID)
-	if !ok {
-		chat = OneToOneFromPublicKey(state.CurrentMessageState.PublicKey, state.Timesource)
-		// We don't want to show the chat to the user
-		chat.Active = false
-	}
-
-	contact, ok := state.AllContacts.Load(message.Id)
-	if !ok {
-		var err error
-		contact, err = buildContactFromPkString(message.Id)
-		if err != nil {
-			return err
-		}
-	}
-
-	if contact.LastUpdated < message.Clock {
-		if !contact.IsAdded() {
-			contact.SystemTags = append(contact.SystemTags, contactAdded)
-		}
-		if contact.Name != message.EnsName {
-			contact.Name = message.EnsName
-			contact.ENSVerified = false
-		}
-		contact.LastUpdated = message.Clock
-		contact.LocalNickname = message.LocalNickname
-
-		state.ModifiedContacts.Store(contact.ID, true)
-		state.AllContacts.Store(contact.ID, contact)
-	}
-
-	// TODO(samyoul) remove storing of an updated reference pointer?
-	state.AllChats.Store(chat.ID, chat)
-
-	return nil
-}
-
-func (m *Messenger) HandleSyncInstallationContact(state *ReceivedMessageState, message protobuf.SyncInstallationContact) error {
+func (m *Messenger) HandleSyncInstallationContact(state *ReceivedMessageState, message protobuf.SyncInstallationContactV2) error {
 	removedOrBlcoked := message.Removed || message.Blocked
 	chat, ok := state.AllChats.Load(state.CurrentMessageState.Contact.ID)
 	newChat := false

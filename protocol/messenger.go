@@ -2319,12 +2319,11 @@ func (m *Messenger) syncContact(ctx context.Context, contact *Contact) error {
 	}
 	clock, chat := m.getLastClockWithRelatedChat()
 
-	syncMessage := &protobuf.SyncInstallationContact{
+	syncMessage := &protobuf.SyncInstallationContactV2{
 		Clock:         clock,
 		Id:            contact.ID,
 		EnsName:       contact.Name,
 		LocalNickname: contact.LocalNickname,
-		Version:       1,
 		Added:         contact.IsAdded(),
 		Blocked:       contact.IsBlocked(),
 		Muted:         chat.Muted,
@@ -2710,18 +2709,17 @@ func (m *Messenger) handleRetrievedMessages(chatWithMessages map[transport.Filte
 						}
 
 					case protobuf.SyncInstallationContact:
+						logger.Warn("SyncInstallationContact is nopt supported")
+
+					case protobuf.SyncInstallationContactV2:
 						if !common.IsPubKeyEqual(messageState.CurrentMessageState.PublicKey, &m.identity.PublicKey) {
 							logger.Warn("not coming from us, ignoring")
 							continue
 						}
 
-						p := msg.ParsedMessage.Interface().(protobuf.SyncInstallationContact)
+						p := msg.ParsedMessage.Interface().(protobuf.SyncInstallationContactV2)
 						logger.Info("Handling SyncInstallationContact", zap.Any("message", p))
-						if p.Version == 0 {
-							err = m.HandleSyncInstallationContactV0(messageState, p)
-						} else {
-							err = m.HandleSyncInstallationContact(messageState, p)
-						}
+						err = m.HandleSyncInstallationContact(messageState, p)
 						if err != nil {
 							logger.Warn("failed to handle SyncInstallationContact", zap.Error(err))
 							allMessagesProcessed = false
