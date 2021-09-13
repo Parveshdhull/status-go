@@ -2319,16 +2319,23 @@ func (m *Messenger) syncContact(ctx context.Context, contact *Contact) error {
 	}
 	clock, chat := m.getLastClockWithRelatedChat()
 
+	var ensName string
+	if contact.ENSVerified {
+		ensName = contact.Name
+	}
+
 	syncMessage := &protobuf.SyncInstallationContactV2{
 		Clock:         clock,
 		Id:            contact.ID,
-		EnsName:       contact.Name,
+		EnsName:       ensName,
 		LocalNickname: contact.LocalNickname,
 		Added:         contact.IsAdded(),
 		Blocked:       contact.IsBlocked(),
 		Muted:         chat.Muted,
 		Removed:       contact.Removed,
 	}
+
+	m.logger.Info("MESSAGE SENT", zap.Any("message", syncMessage))
 
 	encodedMessage, err := proto.Marshal(syncMessage)
 	if err != nil {
@@ -2709,7 +2716,8 @@ func (m *Messenger) handleRetrievedMessages(chatWithMessages map[transport.Filte
 						}
 
 					case protobuf.SyncInstallationContact:
-						logger.Warn("SyncInstallationContact is nopt supported")
+						logger.Warn("SyncInstallationContact is not supported")
+						continue
 
 					case protobuf.SyncInstallationContactV2:
 						if !common.IsPubKeyEqual(messageState.CurrentMessageState.PublicKey, &m.identity.PublicKey) {

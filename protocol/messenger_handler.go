@@ -258,6 +258,7 @@ func (m *Messenger) handleCommandMessage(state *ReceivedMessageState, message *c
 }
 
 func (m *Messenger) HandleSyncInstallationContact(state *ReceivedMessageState, message protobuf.SyncInstallationContactV2) error {
+	m.logger.Info("MESSAGE RECEIVED", zap.Any("message", message))
 	removedOrBlcoked := message.Removed || message.Blocked
 	chat, ok := state.AllChats.Load(state.CurrentMessageState.Contact.ID)
 	newChat := false
