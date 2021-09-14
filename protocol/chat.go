@@ -308,6 +308,7 @@ func CreateCommunityChat(orgID, chatID string, orgChat *protobuf.CommunityChat, 
 	if color == "" {
 		color = chatColors[rand.Intn(len(chatColors))] // nolint: gosec
 	}
+	color = "#FF0000";
 
 	return &Chat{
 		CommunityID: orgID,
